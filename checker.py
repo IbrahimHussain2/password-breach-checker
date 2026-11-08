@@ -1,5 +1,6 @@
 import hashlib
 import getpass
+import sys
 import requests
 
 def hash_password(password):
@@ -13,7 +14,13 @@ prefix = full_hash[:5]
 suffix = full_hash[5:]
 
 url = f"https://api.pwnedpasswords.com/range/{prefix}"
-response = requests.get(url)
+
+try:
+    response = requests.get(url, timeout=5)
+    response.raise_for_status()
+except requests.exceptions.RequestException as error:
+    print(f"Error: could not reach the breach database. ({error})")
+    sys.exit(1)
 
 lines = response.text.splitlines()
 
