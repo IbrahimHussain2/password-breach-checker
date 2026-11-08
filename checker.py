@@ -3,35 +3,48 @@ import getpass
 import sys
 import requests
 
+API_URL = "https://api.pwnedpasswords.com/range/"
+
+
 def hash_password(password):
-    sha1 = hashlib.sha1(password.encode("utf-8")).hexdigest().upper()
-    return sha1
+    return hashlib.sha1(password.encode("utf-8")).hexdigest().upper()
 
-password = getpass.getpass("Enter a password to check: ")
 
-full_hash = hash_password(password)
-prefix = full_hash[:5]
-suffix = full_hash[5:]
-
-url = f"https://api.pwnedpasswords.com/range/{prefix}"
-
-try:
-    response = requests.get(url, timeout=5)
+def get_suffixes(prefix):
+    # only the first 5 chars of the hash get sent, never the full thing
+    response = requests.get(API_URL + prefix, timeout=5)
     response.raise_for_status()
-except requests.exceptions.RequestException as error:
-    print(f"Error: could not reach the breach database. ({error})")
-    sys.exit(1)
+    return response.text.splitlines()
 
-lines = response.text.splitlines()
 
-count = 0
-for line in lines:
-    returned_suffix, times_seen = line.split(":")
-    if returned_suffix == suffix:
-        count = int(times_seen)
-        break
+def check_password(password):
+    full_hash = hash_password(password)
+    prefix = full_hash[:5]
+    suffix = full_hash[5:]
 
-if count > 0:
-    print(f"PWNED: this password has appeared {count:,} times in known breach data. Don't use it.")
-else:
-    print("Not found in any known breaches.")
+    # compare locally - the API never knows which one we wanted
+    for line in get_suffixes(prefix):
+        hash_suffix, count = line.split(":")
+        if hash_suffix == suffix:
+            return int(count)
+
+    return 0
+
+
+def main():
+    password = getpass.getpass("Enter a password to check: ")
+
+    try:
+        count = check_password(password)
+    except requests.exceptions.RequestException as e:
+        print(f"Error: couldn't reach the breach database ({e})")
+        sys.exit(1)
+
+    if count > 0:
+        print(f"PWNED: seen {count:,} times in breach data. Don't use this password.")
+    else:
+        print("Not found in any known breaches.")
+
+
+if __name__ == "__main__":
+    main()
